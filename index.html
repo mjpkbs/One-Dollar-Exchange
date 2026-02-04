@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>환율 그래프 생성기 (USD/KRW)</title>
+    <title>차트 생성기 (환율 & 주식)</title>
     <style>
         * {
             margin: 0;
@@ -27,9 +27,45 @@
         }
 
         h1 {
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             color: #333;
             font-size: 24px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-button:hover {
+            color: #333;
+        }
+
+        .tab-button.active {
+            color: #0066cc;
+            border-bottom-color: #0066cc;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .controls {
@@ -173,6 +209,39 @@
             margin-top: 10px;
         }
 
+        .stock-suggestions {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            position: absolute;
+            width: 300px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .stock-suggestion-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .stock-suggestion-item:hover {
+            background: #f5f5f5;
+        }
+
+        .stock-suggestion-item .ticker {
+            font-weight: 600;
+            color: #0066cc;
+        }
+
+        .stock-suggestion-item .name {
+            color: #666;
+            font-size: 12px;
+        }
+
         svg text {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
         }
@@ -180,459 +249,504 @@
 </head>
 <body>
     <div class="container">
-        <h1>📈 환율 그래프 생성기 (USD/KRW)</h1>
+        <h1>📊 차트 생성기</h1>
+        
+        <div class="tab-buttons">
+            <button class="tab-button active" onclick="switchTab('exchange')">💱 환율 차트</button>
+            <button class="tab-button" onclick="switchTab('stock')">📈 주식 차트</button>
+        </div>
 
-        <div class="controls">
-            <div class="control-group">
-                <label>데이터 소스</label>
-                <select id="dataSource" onchange="toggleApiKeyField()">
-                    <option value="yahoo">Yahoo Finance (빠른 사용, API 키 불필요)</option>
-                    <option value="bok">한국은행 API (공식 데이터, API 키 필요)</option>
-                </select>
-                <div class="info">⚠️ CORS 프록시 사용: 브라우저 보안 정책으로 인해 외부 프록시를 통해 데이터를 가져옵니다. 더 안정적인 사용을 위해서는 웹 서버에 호스팅하거나 백엔드 서버를 구축하는 것을 권장합니다.</div>
-            </div>
-
-            <div class="control-group" id="apiKeyGroup" style="display: none;">
-                <label>한국은행 API 키</label>
-                <input type="text" id="apiKey" placeholder="API 키를 입력하세요">
-                <div class="info">API 키: https://ecos.bok.or.kr/api/ 에서 발급</div>
-            </div>
-
-            <div class="control-group">
-                <label>빠른 선택</label>
-                <div class="preset-buttons">
-                    <button onclick="setPreset('intraday')">📈 오늘 (1분)</button>
-                    <button onclick="setPreset('today')">오늘</button>
-                    <button onclick="setPreset('1week')">1주일</button>
-                    <button onclick="setPreset('1month')">1개월</button>
-                    <button onclick="setPreset('3months')">3개월</button>
-                    <button onclick="setPreset('6months')">6개월</button>
-                    <button onclick="setPreset('1year')">1년</button>
-                    <button onclick="setPreset('3years')">3년</button>
-                    <button onclick="setPreset('5years')">5년</button>
-                    <button onclick="setPreset('10years')">10년</button>
-                    <button onclick="setPreset('ytd')">올해</button>
+        <!-- 환율 탭 -->
+        <div id="exchangeTab" class="tab-content active">
+            <div class="controls">
+                <div class="control-group">
+                    <label>데이터 소스</label>
+                    <select id="dataSource" onchange="toggleApiKeyField()">
+                        <option value="yahoo">Yahoo Finance (빠른 사용, API 키 불필요)</option>
+                        <option value="bok">한국은행 API (공식 데이터, API 키 필요)</option>
+                    </select>
+                    <div class="info">⚠️ CORS 프록시 사용: 브라우저 보안 정책으로 인해 외부 프록시를 통해 데이터를 가져옵니다.</div>
                 </div>
-                <div class="info" id="intradayInfo" style="display: none;">⚠️ 1분 데이터는 Yahoo Finance만 지원합니다 (최근 7일 이내, 평일만)</div>
-            </div>
 
-            <div class="control-group">
-                <label>기간 선택</label>
-                <div class="input-row">
-                    <input type="date" id="startDate">
-                    <span>~</span>
-                    <input type="date" id="endDate">
+                <div class="control-group" id="apiKeyGroup" style="display: none;">
+                    <label>한국은행 API 키</label>
+                    <input type="text" id="apiKey" placeholder="API 키를 입력하세요">
+                    <div class="info">API 키: https://ecos.bok.or.kr/api/ 에서 발급</div>
+                </div>
+
+                <div class="control-group">
+                    <label>빠른 선택</label>
+                    <div class="preset-buttons">
+                        <button onclick="setPreset('intraday')">📈 오늘 (1분)</button>
+                        <button onclick="setPreset('today')">오늘</button>
+                        <button onclick="setPreset('1week')">1주일</button>
+                        <button onclick="setPreset('1month')">1개월</button>
+                        <button onclick="setPreset('3months')">3개월</button>
+                        <button onclick="setPreset('6months')">6개월</button>
+                        <button onclick="setPreset('1year')">1년</button>
+                        <button onclick="setPreset('3years')">3년</button>
+                        <button onclick="setPreset('5years')">5년</button>
+                        <button onclick="setPreset('10years')">10년</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>기간 설정</label>
+                    <div class="input-row">
+                        <input type="date" id="startDate">
+                        <span>~</span>
+                        <input type="date" id="endDate">
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="primary" onclick="fetchAndDrawChart('exchange')">그래프 생성</button>
+                    <button onclick="downloadSVG()">SVG 다운로드</button>
+                    <button class="success" onclick="openInPhotopea()">Photopea로 열기 (PSD 변환)</button>
                 </div>
             </div>
+        </div>
 
-            <div class="control-group" id="timeRangeGroup" style="display: none;">
-                <label>시간 범위 (1분 데이터 전용)</label>
-                <div class="input-row">
-                    <input type="time" id="startTime" value="00:00">
-                    <span>~</span>
-                    <input type="time" id="endTime" value="23:59">
+        <!-- 주식 탭 -->
+        <div id="stockTab" class="tab-content">
+            <div class="controls">
+                <div class="control-group">
+                    <label>종목 검색</label>
+                    <div style="position: relative;">
+                        <input type="text" id="stockSearch" placeholder="종목명 또는 티커 입력 (예: 삼성전자, 005930)" 
+                               oninput="searchStock()" onblur="setTimeout(() => hideSuggestions(), 200)">
+                        <div id="stockSuggestions" class="stock-suggestions"></div>
+                    </div>
+                    <div class="info">💡 한국 주요 종목: 삼성전자, SK하이닉스, 현대차, NAVER, 카카오 등을 검색하거나 티커 코드를 직접 입력하세요</div>
                 </div>
-                <div class="info">💡 위의 기간 선택에서 원하는 날짜를 선택하고, 여기서 시간 범위를 설정하세요. 1일 이내 데이터는 모두 1분 간격으로 표시됩니다.</div>
-            </div>
 
-            <div class="control-group" id="periodGroup" style="display: none;">
-                <label>데이터 주기</label>
-                <select id="periodType">
-                    <option value="D">일별 (Daily)</option>
-                    <option value="M">월별 (Monthly)</option>
-                    <option value="Y">연별 (Yearly)</option>
-                </select>
-            </div>
+                <div class="control-group">
+                    <label>선택된 종목</label>
+                    <div class="input-row">
+                        <input type="text" id="selectedStock" readonly placeholder="종목을 검색하여 선택하세요">
+                        <input type="text" id="selectedTicker" readonly placeholder="티커">
+                    </div>
+                </div>
 
-            <div class="action-buttons">
-                <button class="primary" onclick="fetchAndDrawChart()">📊 그래프 생성</button>
-                <button class="success" onclick="downloadSVG()">💾 SVG 다운로드</button>
-                <button class="success" onclick="openInPhotopea()">🎨 Photopea로 열기</button>
+                <div class="control-group">
+                    <label>빠른 선택</label>
+                    <div class="preset-buttons">
+                        <button onclick="setStockPreset('1week')">1주일</button>
+                        <button onclick="setStockPreset('1month')">1개월</button>
+                        <button onclick="setStockPreset('3months')">3개월</button>
+                        <button onclick="setStockPreset('6months')">6개월</button>
+                        <button onclick="setStockPreset('1year')">1년</button>
+                        <button onclick="setStockPreset('3years')">3년</button>
+                        <button onclick="setStockPreset('5years')">5년</button>
+                        <button onclick="setStockPreset('max')">전체</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>기간 설정</label>
+                    <div class="input-row">
+                        <input type="date" id="stockStartDate">
+                        <span>~</span>
+                        <input type="date" id="stockEndDate">
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="primary" onclick="fetchAndDrawChart('stock')">그래프 생성</button>
+                    <button onclick="downloadSVG()">SVG 다운로드</button>
+                    <button class="success" onclick="openInPhotopea()">Photopea로 열기 (PSD 변환)</button>
+                </div>
             </div>
         </div>
 
         <div id="error"></div>
         <div id="chartContainer">
-            <div class="loading">그래프를 생성하려면 위의 설정을 선택하고 "그래프 생성" 버튼을 클릭하세요.</div>
+            <div class="loading">종목을 선택하고 그래프를 생성해주세요.</div>
         </div>
     </div>
 
     <script>
-        let chartData = null;
-        let currentSVG = null;
-        let isIntradayMode = false;  // 1분 데이터 모드
+        // 주요 한국 주식 종목 매핑
+        const koreanStocks = [
+            { name: '삼성전자', ticker: '005930.KS', exchange: 'KRX' },
+            { name: 'SK하이닉스', ticker: '000660.KS', exchange: 'KRX' },
+            { name: 'LG에너지솔루션', ticker: '373220.KS', exchange: 'KRX' },
+            { name: '삼성바이오로직스', ticker: '207940.KS', exchange: 'KRX' },
+            { name: 'NAVER', ticker: '035420.KS', exchange: 'KRX' },
+            { name: '카카오', ticker: '035720.KS', exchange: 'KRX' },
+            { name: '현대차', ticker: '005380.KS', exchange: 'KRX' },
+            { name: '기아', ticker: '000270.KS', exchange: 'KRX' },
+            { name: 'LG화학', ticker: '051910.KS', exchange: 'KRX' },
+            { name: 'POSCO홀딩스', ticker: '005490.KS', exchange: 'KRX' },
+            { name: '셀트리온', ticker: '068270.KS', exchange: 'KRX' },
+            { name: 'KB금융', ticker: '105560.KS', exchange: 'KRX' },
+            { name: '신한지주', ticker: '055550.KS', exchange: 'KRX' },
+            { name: '하나금융지주', ticker: '086790.KS', exchange: 'KRX' },
+            { name: '삼성SDI', ticker: '006400.KS', exchange: 'KRX' },
+            { name: '현대모비스', ticker: '012330.KS', exchange: 'KRX' },
+            { name: 'LG전자', ticker: '066570.KS', exchange: 'KRX' },
+            { name: '삼성물산', ticker: '028260.KS', exchange: 'KRX' },
+            { name: 'SK이노베이션', ticker: '096770.KS', exchange: 'KRX' },
+            { name: 'SK텔레콤', ticker: '017670.KS', exchange: 'KRX' },
+            { name: 'KT&G', ticker: '033780.KS', exchange: 'KRX' },
+            { name: '카카오뱅크', ticker: '323410.KS', exchange: 'KRX' },
+            { name: '크래프톤', ticker: '259960.KS', exchange: 'KRX' },
+            { name: '엔씨소프트', ticker: '036570.KS', exchange: 'KRX' },
+            { name: '넷마블', ticker: '251270.KS', exchange: 'KRX' },
+        ];
 
-        // API 키 필드 표시/숨김
+        let currentSVG = null;
+        let chartData = null;
+        let currentChartType = 'exchange';
+        let selectedStockData = null;
+
+        // 탭 전환
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            if (tabName === 'exchange') {
+                document.querySelector('.tab-button:nth-child(1)').classList.add('active');
+                document.getElementById('exchangeTab').classList.add('active');
+            } else {
+                document.querySelector('.tab-button:nth-child(2)').classList.add('active');
+                document.getElementById('stockTab').classList.add('active');
+            }
+        }
+
+        // 종목 검색
+        function searchStock() {
+            const query = document.getElementById('stockSearch').value.toLowerCase().trim();
+            const suggestionsDiv = document.getElementById('stockSuggestions');
+            
+            if (query.length === 0) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+
+            const filtered = koreanStocks.filter(stock => 
+                stock.name.toLowerCase().includes(query) || 
+                stock.ticker.toLowerCase().includes(query)
+            );
+
+            if (filtered.length === 0) {
+                suggestionsDiv.style.display = 'none';
+                return;
+            }
+
+            suggestionsDiv.innerHTML = filtered.map(stock => `
+                <div class="stock-suggestion-item" onclick="selectStock('${stock.ticker}', '${stock.name}')">
+                    <div class="ticker">${stock.ticker}</div>
+                    <div class="name">${stock.name}</div>
+                </div>
+            `).join('');
+            
+            suggestionsDiv.style.display = 'block';
+        }
+
+        function selectStock(ticker, name) {
+            document.getElementById('selectedStock').value = name;
+            document.getElementById('selectedTicker').value = ticker;
+            document.getElementById('stockSearch').value = name;
+            selectedStockData = { ticker, name };
+            hideSuggestions();
+        }
+
+        function hideSuggestions() {
+            document.getElementById('stockSuggestions').style.display = 'none';
+        }
+
+        // 주식 기간 프리셋
+        function setStockPreset(preset) {
+            const endDate = new Date();
+            let startDate = new Date();
+
+            switch(preset) {
+                case '1week':
+                    startDate.setDate(endDate.getDate() - 7);
+                    break;
+                case '1month':
+                    startDate.setMonth(endDate.getMonth() - 1);
+                    break;
+                case '3months':
+                    startDate.setMonth(endDate.getMonth() - 3);
+                    break;
+                case '6months':
+                    startDate.setMonth(endDate.getMonth() - 6);
+                    break;
+                case '1year':
+                    startDate.setFullYear(endDate.getFullYear() - 1);
+                    break;
+                case '3years':
+                    startDate.setFullYear(endDate.getFullYear() - 3);
+                    break;
+                case '5years':
+                    startDate.setFullYear(endDate.getFullYear() - 5);
+                    break;
+                case 'max':
+                    startDate.setFullYear(endDate.getFullYear() - 20);
+                    break;
+            }
+
+            document.getElementById('stockStartDate').value = startDate.toISOString().split('T')[0];
+            document.getElementById('stockEndDate').value = endDate.toISOString().split('T')[0];
+        }
+
+        // 환율 기간 프리셋
+        function setPreset(preset) {
+            const endDate = new Date();
+            let startDate = new Date();
+
+            if (preset === 'intraday') {
+                document.getElementById('startDate').value = endDate.toISOString().split('T')[0];
+                document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+                return;
+            }
+
+            switch(preset) {
+                case 'today':
+                    startDate = endDate;
+                    break;
+                case '1week':
+                    startDate.setDate(endDate.getDate() - 7);
+                    break;
+                case '1month':
+                    startDate.setMonth(endDate.getMonth() - 1);
+                    break;
+                case '3months':
+                    startDate.setMonth(endDate.getMonth() - 3);
+                    break;
+                case '6months':
+                    startDate.setMonth(endDate.getMonth() - 6);
+                    break;
+                case '1year':
+                    startDate.setFullYear(endDate.getFullYear() - 1);
+                    break;
+                case '3years':
+                    startDate.setFullYear(endDate.getFullYear() - 3);
+                    break;
+                case '5years':
+                    startDate.setFullYear(endDate.getFullYear() - 5);
+                    break;
+                case '10years':
+                    startDate.setFullYear(endDate.getFullYear() - 10);
+                    break;
+            }
+
+            document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
+            document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+        }
+
         function toggleApiKeyField() {
             const dataSource = document.getElementById('dataSource').value;
             const apiKeyGroup = document.getElementById('apiKeyGroup');
-            const periodGroup = document.getElementById('periodGroup');
-            
-            if (dataSource === 'bok') {
-                apiKeyGroup.style.display = 'flex';
-                periodGroup.style.display = 'flex';
-            } else {
-                apiKeyGroup.style.display = 'none';
-                periodGroup.style.display = 'none';
-            }
+            apiKeyGroup.style.display = dataSource === 'bok' ? 'block' : 'none';
         }
 
-        // 날짜 포맷 함수
-        function formatDate(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}${month}${day}`;
-        }
-
-        function formatDateDisplay(dateStr) {
-            // YYYYMMDD -> YYYY-MM-DD
-            if (dateStr.length === 8) {
-                return `${dateStr.substr(0,4)}-${dateStr.substr(4,2)}-${dateStr.substr(6,2)}`;
+        // Yahoo Finance에서 주식 데이터 가져오기
+        async function fetchStockData() {
+            if (!selectedStockData) {
+                throw new Error('종목을 먼저 선택해주세요.');
             }
-            // YYYYMM -> YYYY-MM
-            if (dateStr.length === 6) {
-                return `${dateStr.substr(0,4)}-${dateStr.substr(4,2)}`;
-            }
-            // YYYY -> YYYY
-            return dateStr;
-        }
 
-        // 프리셋 날짜 설정
-        function setPreset(preset) {
-            const today = new Date();
-            const startDate = new Date();
-            const intradayInfo = document.getElementById('intradayInfo');
-            const timeRangeGroup = document.getElementById('timeRangeGroup');
-            
-            if (preset === 'intraday') {
-                // 1분 데이터는 사용자가 선택한 날짜
-                isIntradayMode = true;
-                
-                // Yahoo Finance로 강제 전환
-                document.getElementById('dataSource').value = 'yahoo';
-                toggleApiKeyField();
-                
-                intradayInfo.style.display = 'block';
-                timeRangeGroup.style.display = 'flex';
-                
-                // 기본 시간 설정 (전체 하루)
-                document.getElementById('startTime').value = '00:00';
-                document.getElementById('endTime').value = '23:59';
-                
-                // 날짜는 사용자가 선택하도록 현재 날짜 유지
-                if (!document.getElementById('startDate').value) {
-                    document.getElementById('startDate').value = today.toISOString().split('T')[0];
-                }
-                if (!document.getElementById('endDate').value) {
-                    document.getElementById('endDate').value = today.toISOString().split('T')[0];
-                }
-            } else {
-                isIntradayMode = false;
-                intradayInfo.style.display = 'none';
-                timeRangeGroup.style.display = 'none';
-                
-                switch(preset) {
-                    case 'today':
-                        startDate.setDate(today.getDate() - 1);
-                        break;
-                    case '1week':
-                        startDate.setDate(today.getDate() - 7);
-                        break;
-                    case '1month':
-                        startDate.setMonth(today.getMonth() - 1);
-                        break;
-                    case '3months':
-                        startDate.setMonth(today.getMonth() - 3);
-                        break;
-                    case '6months':
-                        startDate.setMonth(today.getMonth() - 6);
-                        break;
-                    case '1year':
-                        startDate.setFullYear(today.getFullYear() - 1);
-                        break;
-                    case '3years':
-                        startDate.setFullYear(today.getFullYear() - 3);
-                        break;
-                    case '5years':
-                        startDate.setFullYear(today.getFullYear() - 5);
-                        break;
-                    case '10years':
-                        startDate.setFullYear(today.getFullYear() - 10);
-                        break;
-                    case 'ytd':
-                        startDate.setMonth(0);
-                        startDate.setDate(1);
-                        break;
-                }
-                
-                document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
-                document.getElementById('endDate').value = today.toISOString().split('T')[0];
-            }
-        }
-
-        // 초기 날짜 설정 (최근 1개월)
-        window.onload = function() {
-            setPreset('1month');
-        };
-
-        // CORS 프록시 목록 (fallback 지원)
-        const corsProxies = [
-            'https://corsproxy.io/?',
-            'https://api.allorigins.win/raw?url=',
-            'https://cors-anywhere.herokuapp.com/'
-        ];
-
-        // CORS 프록시를 통해 fetch (자동 fallback)
-        async function fetchWithCorsProxy(url) {
-            let lastError;
-            
-            for (let i = 0; i < corsProxies.length; i++) {
-                try {
-                    const proxy = corsProxies[i];
-                    const proxyUrl = proxy + encodeURIComponent(url);
-                    console.log(`Trying CORS proxy ${i + 1}/${corsProxies.length}:`, proxy);
-                    
-                    const response = await fetch(proxyUrl);
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-                    return await response.json();
-                } catch (error) {
-                    console.warn(`CORS proxy ${i + 1} failed:`, error);
-                    lastError = error;
-                    // 다음 프록시 시도
-                }
-            }
-            
-            throw new Error(`모든 CORS 프록시 실패: ${lastError.message}`);
-        }
-
-        // 한국은행 API에서 데이터 가져오기 (CORS 우회)
-        async function fetchExchangeRateData() {
-            const apiKey = document.getElementById('apiKey').value.trim();
-            const startDate = document.getElementById('startDate').value.replace(/-/g, '');
-            const endDate = document.getElementById('endDate').value.replace(/-/g, '');
-            const periodType = document.getElementById('periodType').value;
-
-            if (!apiKey) {
-                throw new Error('API 키를 입력해주세요.');
-            }
+            const startDate = document.getElementById('stockStartDate').value;
+            const endDate = document.getElementById('stockEndDate').value;
 
             if (!startDate || !endDate) {
                 throw new Error('시작일과 종료일을 선택해주세요.');
             }
 
-            // 한국은행 API 엔드포인트
-            // 통계표코드: 731Y001 (주요국 환율)
-            // 통계항목코드: 0000001 (미국 USD)
-            const statCode = '731Y001';
-            const itemCode = '0000001';
-            
-            const apiUrl = `https://ecos.bok.or.kr/api/StatisticSearch/${apiKey}/json/kr/1/10000/${statCode}/${periodType}/${startDate}/${endDate}/${itemCode}`;
-            
-            console.log('Fetching from:', apiUrl);
+            const period1 = Math.floor(new Date(startDate).getTime() / 1000);
+            const period2 = Math.floor(new Date(endDate).getTime() / 1000);
 
-            const data = await fetchWithCorsProxy(apiUrl);
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${selectedStockData.ticker}?period1=${period1}&period2=${period2}&interval=1d`;
+            const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
-            console.log('API Response:', data);
-
-            if (data.RESULT) {
-                throw new Error(`API 오류: ${data.RESULT.MESSAGE}`);
+            const response = await fetch(proxyUrl + encodeURIComponent(url));
+            if (!response.ok) {
+                throw new Error('데이터를 불러올 수 없습니다.');
             }
 
-            if (!data.StatisticSearch || !data.StatisticSearch.row) {
-                throw new Error('데이터를 찾을 수 없습니다. 날짜 범위를 확인해주세요.');
+            const data = await response.json();
+            
+            if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+                throw new Error('데이터가 없습니다.');
             }
 
-            return data.StatisticSearch.row;
-        }
-
-        // Yahoo Finance에서 데이터 가져오기 (대체 방법)
-        // 시간 범위에 따른 적절한 샘플링 간격 결정
-        function getSamplingInterval(minutesRange) {
-            // 1일(1440분) 이내는 모두 1분 간격
-            if (minutesRange <= 1440) return 1;     // 24시간 이하: 1분마다
-            // 이후는 필요시 추가 가능
-            return 1;
-        }
-
-        // 데이터 샘플링 (N분마다 한 개씩)
-        function sampleData(data, intervalMinutes) {
-            if (intervalMinutes === 1) return data; // 1분이면 샘플링 불필요
-            
-            const sampled = [];
-            for (let i = 0; i < data.length; i += intervalMinutes) {
-                sampled.push(data[i]);
-            }
-            return sampled;
-        }
-
-        async function fetchYahooFinanceData() {
-            let startDate = new Date(document.getElementById('startDate').value);
-            let endDate = new Date(document.getElementById('endDate').value);
-            
-            let period1, period2;
-            
-            if (isIntradayMode) {
-                // 인트라데이 모드: 시간 범위 적용
-                const startTime = document.getElementById('startTime').value;
-                const endTime = document.getElementById('endTime').value;
-                
-                const [startHour, startMinute] = startTime.split(':').map(Number);
-                const [endHour, endMinute] = endTime.split(':').map(Number);
-                
-                // 시작 날짜는 사용자가 선택한 날짜 사용
-                startDate.setHours(startHour, startMinute, 0, 0);
-                
-                // 종료 날짜도 같은 날짜 사용 (하루치 데이터)
-                endDate = new Date(startDate);
-                endDate.setHours(endHour, endMinute, 59, 999);
-                
-                // 주말 체크
-                const dayOfWeek = startDate.getDay();
-                if (dayOfWeek === 0 || dayOfWeek === 6) {
-                    throw new Error('주말에는 거래 데이터가 없습니다. 평일 날짜를 선택해주세요.');
-                }
-            }
-            
-            period1 = Math.floor(startDate.getTime() / 1000);
-            period2 = Math.floor(endDate.getTime() / 1000);
-            
-            // 인트라데이 모드인 경우 1분 간격, 아니면 1일 간격
-            const interval = isIntradayMode ? '1m' : '1d';
-            
-            const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?period1=${period1}&period2=${period2}&interval=${interval}`;
-            
-            console.log('Fetching from Yahoo Finance:', apiUrl, 'Intraday mode:', isIntradayMode);
-            console.log('Date range:', startDate, 'to', endDate);
-            
-            const data = await fetchWithCorsProxy(apiUrl);
-            
-            console.log('Yahoo Finance Response:', data);
-            
-            if (!data.chart || !data.chart.result || !data.chart.result[0]) {
-                throw new Error('Yahoo Finance에서 데이터를 가져올 수 없습니다.');
-            }
-            
             const result = data.chart.result[0];
             const timestamps = result.timestamp;
-            const closes = result.indicators.quote[0].close;
-            
-            if (!timestamps || timestamps.length === 0) {
-                if (isIntradayMode) {
-                    throw new Error('선택한 날짜에 데이터가 없습니다. 주말, 공휴일 또는 최근 7일 이내의 평일 날짜를 선택해주세요.');
-                } else {
-                    throw new Error('선택한 기간에 데이터가 없습니다. 다른 날짜 범위를 선택해주세요.');
-                }
-            }
-            
-            // 한국은행 API 형식으로 변환
-            let convertedData = timestamps.map((timestamp, i) => {
-                const date = new Date(timestamp * 1000);
-                let dateStr;
-                
-                if (isIntradayMode) {
-                    // 1분 데이터는 시:분 형식
-                    const hours = String(date.getHours()).padStart(2, '0');
-                    const minutes = String(date.getMinutes()).padStart(2, '0');
-                    dateStr = `${hours}:${minutes}`;
-                } else {
-                    dateStr = formatDate(date);
-                }
-                
-                return {
-                    TIME: dateStr,
-                    DATA_VALUE: closes[i] ? closes[i].toFixed(2) : null,
-                    TIMESTAMP: timestamp,
-                    DATE_OBJ: date
-                };
-            }).filter(d => d.DATA_VALUE !== null);
-            
-            // 인트라데이 모드: 사용자가 선택한 시간 범위로 필터링
-            if (isIntradayMode) {
-                convertedData = convertedData.filter(d => {
-                    const timestamp = d.TIMESTAMP * 1000;
-                    return timestamp >= startDate.getTime() && timestamp <= endDate.getTime();
-                });
-            }
-            
-            if (convertedData.length === 0) {
-                if (isIntradayMode) {
-                    throw new Error('선택한 날짜/시간에 유효한 데이터가 없습니다. 주말, 공휴일이 아닌 최근 7일 이내의 거래 시간을 선택해주세요.');
-                } else {
-                    throw new Error('선택한 기간에 유효한 데이터가 없습니다.');
-                }
-            }
-            
-            // 인트라데이 모드: 시간 범위에 따라 스마트 샘플링
-            if (isIntradayMode && convertedData.length > 0) {
-                const minutesRange = (period2 - period1) / 60;
-                const samplingInterval = getSamplingInterval(minutesRange);
-                
-                console.log(`Time range: ${minutesRange.toFixed(0)} minutes, Sampling every ${samplingInterval} minute(s)`);
-                console.log(`Data points before sampling: ${convertedData.length}, after: ${Math.ceil(convertedData.length / samplingInterval)}`);
-                
-                convertedData = sampleData(convertedData, samplingInterval);
-            }
-            
-            return convertedData;
+            const quotes = result.indicators.quote[0];
+
+            const points = timestamps.map((timestamp, i) => ({
+                date: new Date(timestamp * 1000).toISOString().split('T')[0],
+                value: quotes.close[i],
+                high: quotes.high[i],
+                low: quotes.low[i],
+                open: quotes.open[i],
+                volume: quotes.volume[i]
+            })).filter(p => p.value != null);
+
+            return points;
         }
 
-        // 그래프 그리기
-        function drawChart(data) {
+        // Yahoo Finance에서 환율 데이터 가져오기
+        async function fetchYahooFinanceData() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!startDate || !endDate) {
+                throw new Error('시작일과 종료일을 선택해주세요.');
+            }
+
+            const isIntraday = startDate === endDate;
+
+            if (isIntraday) {
+                const url = 'https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?interval=1m&range=1d';
+                const proxyUrl = 'https://api.allorigins.win/raw?url=';
+
+                const response = await fetch(proxyUrl + encodeURIComponent(url));
+                if (!response.ok) {
+                    throw new Error('Yahoo Finance API 요청 실패');
+                }
+
+                const data = await response.json();
+                
+                if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+                    throw new Error('데이터를 찾을 수 없습니다.');
+                }
+
+                const result = data.chart.result[0];
+                const timestamps = result.timestamp;
+                const quotes = result.indicators.quote[0];
+
+                const points = timestamps.map((timestamp, i) => ({
+                    date: new Date(timestamp * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                    value: quotes.close[i],
+                    timestamp: timestamp
+                })).filter(p => p.value != null);
+
+                return points;
+            } else {
+                const period1 = Math.floor(new Date(startDate).getTime() / 1000);
+                const period2 = Math.floor(new Date(endDate).getTime() / 1000);
+
+                const url = `https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?period1=${period1}&period2=${period2}&interval=1d`;
+                const proxyUrl = 'https://api.allorigins.win/raw?url=';
+
+                const response = await fetch(proxyUrl + encodeURIComponent(url));
+                if (!response.ok) {
+                    throw new Error('Yahoo Finance API 요청 실패');
+                }
+
+                const data = await response.json();
+                
+                if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+                    throw new Error('데이터를 찾을 수 없습니다.');
+                }
+
+                const result = data.chart.result[0];
+                const timestamps = result.timestamp;
+                const quotes = result.indicators.quote[0];
+
+                const points = timestamps.map((timestamp, i) => ({
+                    date: new Date(timestamp * 1000).toISOString().split('T')[0],
+                    value: quotes.close[i],
+                    timestamp: timestamp
+                })).filter(p => p.value != null);
+
+                return points;
+            }
+        }
+
+        // 한국은행 API
+        async function fetchExchangeRateData() {
+            const apiKey = document.getElementById('apiKey').value;
+            if (!apiKey) {
+                throw new Error('API 키를 입력해주세요.');
+            }
+
+            const startDate = document.getElementById('startDate').value.replace(/-/g, '');
+            const endDate = document.getElementById('endDate').value.replace(/-/g, '');
+
+            const url = `https://ecos.bok.or.kr/api/StatisticSearch/${apiKey}/json/kr/1/10000/036Y001/DD/${startDate}/${endDate}/0000001/?/?`;
+            const proxyUrl = 'https://api.allorigins.win/raw?url=';
+
+            const response = await fetch(proxyUrl + encodeURIComponent(url));
+            if (!response.ok) {
+                throw new Error('한국은행 API 요청 실패');
+            }
+
+            const data = await response.json();
+            
+            if (!data.StatisticSearch || !data.StatisticSearch.row) {
+                throw new Error('데이터를 찾을 수 없습니다. API 키와 날짜를 확인해주세요.');
+            }
+
+            const points = data.StatisticSearch.row.map(item => ({
+                date: item.TIME,
+                value: parseFloat(item.DATA_VALUE)
+            }));
+
+            return points;
+        }
+
+        function formatDateDisplay(dateStr) {
+            if (!dateStr) return '';
+            
+            if (dateStr.includes(':')) {
+                return dateStr;
+            }
+            
+            if (dateStr.length === 8) {
+                return `${dateStr.substr(0,4)}.${dateStr.substr(4,2)}.${dateStr.substr(6,2)}`;
+            }
+            
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            
+            return `${year}.${month}.${day}`;
+        }
+
+        function drawChart(points, chartType = 'exchange') {
+            if (!points || points.length === 0) {
+                throw new Error('데이터가 없습니다.');
+            }
+
             const width = 1200;
             const height = 600;
-            const margin = { top: 60, right: 100, bottom: 80, left: 80 };
+            const margin = { top: 80, right: 150, bottom: 80, left: 80 };
             const chartWidth = width - margin.left - margin.right;
             const chartHeight = height - margin.top - margin.bottom;
 
-            // 데이터 처리
-            const points = data.map(d => ({
-                date: d.TIME,
-                value: parseFloat(d.DATA_VALUE),
-                timestamp: d.TIMESTAMP
-            })); // 데이터는 이미 시간순으로 정렬되어 있음
+            const isIntradayMode = points[0].date && points[0].date.includes(':');
 
-            // 최소/최대값 계산
             const values = points.map(p => p.value);
-            const minValue = Math.min(...values);
-            const maxValue = Math.max(...values);
-            const valueRange = maxValue - minValue;
-            
-            // Y축을 깔끔한 정수로 반올림
-            const rawMin = minValue - valueRange * 0.1;
-            const rawMax = maxValue + valueRange * 0.1;
-            
-            // 적절한 간격 계산 (5, 10, 20 등)
-            const roughStep = (rawMax - rawMin) / 6;
-            let niceStep;
-            if (roughStep < 5) niceStep = 5;
-            else if (roughStep < 10) niceStep = 10;
-            else if (roughStep < 20) niceStep = 20;
-            else if (roughStep < 50) niceStep = 50;
-            else niceStep = Math.ceil(roughStep / 10) * 10;
-            
-            const yMin = Math.floor(rawMin / niceStep) * niceStep;
-            const yMax = Math.ceil(rawMax / niceStep) * niceStep;
+            const yMin = Math.min(...values) * 0.995;
+            const yMax = Math.max(...values) * 1.005;
 
-            // SVG 생성
-            let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
-            
-            // 배경
+            let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
             svg += `<rect width="${width}" height="${height}" fill="white"/>`;
 
-            // 제목
             const startDateDisplay = isIntradayMode ? points[0].date : formatDateDisplay(points[0].date);
             const endDateDisplay = isIntradayMode ? points[points.length - 1].date : formatDateDisplay(points[points.length - 1].date);
             
-            const titleText = isIntradayMode ? '미국 달러/원 환율 (실시간 - 1분)' : '미국 달러/원 환율';
-            const dateRangeText = isIntradayMode ? 
-                `오늘 ${startDateDisplay} ~ ${endDateDisplay}` : 
-                `${startDateDisplay} ~ ${endDateDisplay}`;
+            let titleText, subtitleText;
+            if (chartType === 'stock') {
+                titleText = `${selectedStockData.name} (${selectedStockData.ticker})`;
+                subtitleText = `${startDateDisplay} ~ ${endDateDisplay}`;
+            } else {
+                titleText = isIntradayMode ? '미국 달러/원 환율 (실시간 - 1분)' : '미국 달러/원 환율';
+                subtitleText = isIntradayMode ? 
+                    `오늘 ${startDateDisplay} ~ ${endDateDisplay}` : 
+                    `${startDateDisplay} ~ ${endDateDisplay}`;
+            }
             
             svg += `<text x="${width/2}" y="30" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="20" font-weight="bold" fill="#333">${titleText}</text>`;
-            svg += `<text x="${width/2}" y="50" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="14" fill="#666">${dateRangeText}</text>`;
+            svg += `<text x="${width/2}" y="50" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="14" fill="#666">${subtitleText}</text>`;
 
             // 그리드 및 Y축 라벨
             const ySteps = 6;
@@ -640,26 +754,25 @@
                 const value = yMin + (yMax - yMin) * i / ySteps;
                 const y = margin.top + chartHeight - (chartHeight * i / ySteps);
                 
-                // 그리드 라인
                 svg += `<line x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}" stroke="#e0e0e0" stroke-width="1"/>`;
                 
-                // Y축 라벨 (정수.00 형식)
-                const labelValue = Math.round(value);
-                svg += `<text x="${margin.left - 10}" y="${y + 5}" text-anchor="end" font-family="AppleSDGothicNeo-Regular" font-size="12" fill="#666">${labelValue}.00</text>`;
+                const labelValue = chartType === 'stock' ? 
+                    value.toLocaleString('ko-KR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) :
+                    Math.round(value);
+                const suffix = chartType === 'stock' ? '' : '.00';
+                svg += `<text x="${margin.left - 10}" y="${y + 5}" text-anchor="end" font-family="AppleSDGothicNeo-Regular" font-size="12" fill="#666">${labelValue}${suffix}</text>`;
             }
 
             // X축 라벨
             let xLabelCount, xStep;
             
             if (isIntradayMode) {
-                // 1분 데이터: 정각(00분)만 표시, 시간 기반 위치 계산
                 const firstTimestamp = points[0].timestamp;
                 const lastTimestamp = points[points.length - 1].timestamp;
                 const timeRange = lastTimestamp - firstTimestamp;
                 
                 const hourlyPoints = [];
                 points.forEach((point, i) => {
-                    // HH:MM 형식에서 분이 00인 경우만 선택
                     if (point.date.endsWith(':00')) {
                         hourlyPoints.push({ 
                             timestamp: point.timestamp, 
@@ -668,7 +781,6 @@
                     }
                 });
                 
-                // 정각 라벨 표시 (시간 기반 위치)
                 hourlyPoints.forEach(hp => {
                     const timeProgress = (hp.timestamp - firstTimestamp) / timeRange;
                     const x = margin.left + (chartWidth * timeProgress);
@@ -683,8 +795,6 @@
                     const x = margin.left + (chartWidth * i / (points.length - 1));
                     const dateLabel = formatDateDisplay(points[i].date);
                     svg += `<text x="${x}" y="${height - margin.bottom + 20}" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="11" fill="#666">${dateLabel}</text>`;
-                    
-                    // X축 눈금
                     svg += `<line x1="${x}" y1="${height - margin.bottom}" x2="${x}" y2="${height - margin.bottom + 5}" stroke="#999" stroke-width="1"/>`;
                 }
             }
@@ -694,13 +804,12 @@
             svg += `<line x1="${margin.left}" y1="${height - margin.bottom}" x2="${width - margin.right}" y2="${height - margin.bottom}" stroke="#333" stroke-width="2"/>`;
 
             // 라인 경로 생성
-            const firstTimestamp = points[0].timestamp;
-            const lastTimestamp = points[points.length - 1].timestamp;
+            const firstTimestamp = points[0].timestamp || 0;
+            const lastTimestamp = points[points.length - 1].timestamp || 1;
             const timeRange = lastTimestamp - firstTimestamp;
             
             let pathData = '';
             points.forEach((point, i) => {
-                // 인트라데이 모드: 시간 기반 X 위치, 그 외: 인덱스 기반
                 let x;
                 if (isIntradayMode && timeRange > 0) {
                     const timeProgress = (point.timestamp - firstTimestamp) / timeRange;
@@ -718,11 +827,14 @@
                 }
             });
 
+            // 색상 설정 (주식은 녹색, 환율은 파란색)
+            const lineColor = chartType === 'stock' ? '#10b981' : '#4285f4';
+            
             // 영역 채우기 (그라데이션)
             svg += `<defs>
                 <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" style="stop-color:#4285f4;stop-opacity:0.3" />
-                    <stop offset="100%" style="stop-color:#4285f4;stop-opacity:0.05" />
+                    <stop offset="0%" style="stop-color:${lineColor};stop-opacity:0.3" />
+                    <stop offset="100%" style="stop-color:${lineColor};stop-opacity:0.05" />
                 </linearGradient>
             </defs>`;
 
@@ -730,25 +842,29 @@
             svg += `<path d="${areaPath}" fill="url(#areaGradient)"/>`;
 
             // 라인 그리기
-            svg += `<path d="${pathData}" fill="none" stroke="#4285f4" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+            svg += `<path d="${pathData}" fill="none" stroke="${lineColor}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
 
-            // 데이터 포인트 (1분 데이터는 너무 많아서 표시 안 함)
+            // 데이터 포인트
             if (!isIntradayMode) {
                 points.forEach((point, i) => {
                     const x = margin.left + (chartWidth * i / (points.length - 1));
                     const y = margin.top + chartHeight - ((point.value - yMin) / (yMax - yMin) * chartHeight);
-                    
-                    svg += `<circle cx="${x}" cy="${y}" r="4" fill="#4285f4" stroke="white" stroke-width="2"/>`;
+                    svg += `<circle cx="${x}" cy="${y}" r="4" fill="${lineColor}" stroke="white" stroke-width="2"/>`;
                 });
             }
 
-            // 현재값 표시 (마지막 데이터)
+            // 현재값 표시
             const lastPoint = points[points.length - 1];
             const lastX = margin.left + chartWidth;
             const lastY = margin.top + chartHeight - ((lastPoint.value - yMin) / (yMax - yMin) * chartHeight);
             
-            svg += `<rect x="${lastX + 10}" y="${lastY - 20}" width="100" height="40" fill="white" stroke="#4285f4" stroke-width="2" rx="5"/>`;
-            svg += `<text x="${lastX + 60}" y="${lastY}" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="16" font-weight="bold" fill="#4285f4">${lastPoint.value.toFixed(2)}원</text>`;
+            const displayValue = chartType === 'stock' ? 
+                lastPoint.value.toLocaleString('ko-KR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) :
+                lastPoint.value.toFixed(2);
+            const suffix = chartType === 'stock' ? '원' : '원';
+            
+            svg += `<rect x="${lastX + 10}" y="${lastY - 20}" width="100" height="40" fill="white" stroke="${lineColor}" stroke-width="2" rx="5"/>`;
+            svg += `<text x="${lastX + 60}" y="${lastY}" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="16" font-weight="bold" fill="${lineColor}">${displayValue}${suffix}</text>`;
 
             // 변화량 계산
             const firstValue = points[0].value;
@@ -757,7 +873,11 @@
             const changeColor = change >= 0 ? '#d32f2f' : '#1976d2';
             const changeSign = change >= 0 ? '+' : '';
             
-            svg += `<text x="${lastX + 60}" y="${lastY + 15}" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="12" fill="${changeColor}">${changeSign}${change.toFixed(2)} (${changeSign}${changePercent}%)</text>`;
+            const changeDisplay = chartType === 'stock' ? 
+                change.toLocaleString('ko-KR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) :
+                change.toFixed(2);
+            
+            svg += `<text x="${lastX + 60}" y="${lastY + 15}" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="12" fill="${changeColor}">${changeSign}${changeDisplay} (${changeSign}${changePercent}%)</text>`;
 
             svg += '</svg>';
 
@@ -765,10 +885,10 @@
         }
 
         // 메인 함수
-        async function fetchAndDrawChart() {
+        async function fetchAndDrawChart(type) {
+            currentChartType = type;
             const errorDiv = document.getElementById('error');
             const chartContainer = document.getElementById('chartContainer');
-            const dataSource = document.getElementById('dataSource').value;
             
             errorDiv.innerHTML = '';
             chartContainer.innerHTML = '<div class="loading">데이터를 불러오는 중...</div>';
@@ -776,15 +896,20 @@
             try {
                 let data;
                 
-                if (dataSource === 'bok') {
-                    data = await fetchExchangeRateData();
+                if (type === 'stock') {
+                    data = await fetchStockData();
                 } else {
-                    data = await fetchYahooFinanceData();
+                    const dataSource = document.getElementById('dataSource').value;
+                    if (dataSource === 'bok') {
+                        data = await fetchExchangeRateData();
+                    } else {
+                        data = await fetchYahooFinanceData();
+                    }
                 }
                 
                 chartData = data;
                 
-                const svg = drawChart(data);
+                const svg = drawChart(data, type);
                 currentSVG = svg;
                 
                 chartContainer.innerHTML = svg;
@@ -802,11 +927,15 @@
                 return;
             }
 
+            const filename = currentChartType === 'stock' && selectedStockData ? 
+                `주식차트_${selectedStockData.name}_${new Date().toISOString().split('T')[0]}.svg` :
+                `환율그래프_${new Date().toISOString().split('T')[0]}.svg`;
+
             const blob = new Blob([currentSVG], { type: 'image/svg+xml' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `환율그래프_${new Date().toISOString().split('T')[0]}.svg`;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -820,10 +949,8 @@
                 return;
             }
 
-            // SVG를 base64로 인코딩
             const svgBase64 = btoa(unescape(encodeURIComponent(currentSVG)));
             
-            // Photopea API 사용
             const photopeaURL = `https://www.photopea.com#${encodeURIComponent(JSON.stringify({
                 files: [`data:image/svg+xml;base64,${svgBase64}`],
                 environment: {}
@@ -833,6 +960,18 @@
             
             alert('Photopea에서 파일이 열립니다. 편집 후 File > Export as > PSD를 선택하여 저장하세요.');
         }
+
+        // 초기 날짜 설정
+        window.onload = function() {
+            const today = new Date().toISOString().split('T')[0];
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            
+            document.getElementById('startDate').value = oneMonthAgo.toISOString().split('T')[0];
+            document.getElementById('endDate').value = today;
+            document.getElementById('stockStartDate').value = oneMonthAgo.toISOString().split('T')[0];
+            document.getElementById('stockEndDate').value = today;
+        };
     </script>
 </body>
 </html>
