@@ -223,7 +223,7 @@
             background: white;
             border: 1px solid #ddd;
             border-radius: 4px;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: auto;
             position: absolute;
             width: 300px;
@@ -323,11 +323,11 @@
                 <div class="control-group">
                     <label>종목 검색</label>
                     <div style="position: relative;">
-                        <input type="text" id="stockSearch" placeholder="종목명 또는 티커 입력 (예: 삼성전자, 005930)" 
+                        <input type="text" id="stockSearch" placeholder="종목명 또는 티커 입력 (예: 삼성전자, Apple, TSLA)" 
                                oninput="searchStock()" onblur="setTimeout(() => hideSuggestions(), 200)">
                         <div id="stockSuggestions" class="stock-suggestions"></div>
                     </div>
-                    <div class="info">💡 한국 주요 종목: 삼성전자, SK하이닉스, 현대차, NAVER, 카카오 등을 검색하거나 티커 코드를 직접 입력하세요</div>
+                    <div class="info">💡 종목 검색: 한국(삼성전자, SK하이닉스, NAVER...) 및 미국(Apple, Microsoft, Tesla...) 주요 종목을 검색하거나 티커 코드를 직접 입력하세요</div>
                     <div class="info">⚠️ CORS 이슈: Yahoo Finance API 접근을 위해 여러 프록시를 자동으로 시도합니다. 모든 프록시 실패 시 <a href="https://chrome.google.com/webstore/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank">CORS 확장 프로그램</a>을 설치해보세요.</div>
                 </div>
 
@@ -377,33 +377,100 @@
     </div>
 
     <script>
-        // 주요 한국 주식 종목 매핑
-        const koreanStocks = [
-            { name: '삼성전자', ticker: '005930.KS', exchange: 'KRX' },
-            { name: 'SK하이닉스', ticker: '000660.KS', exchange: 'KRX' },
-            { name: 'LG에너지솔루션', ticker: '373220.KS', exchange: 'KRX' },
-            { name: '삼성바이오로직스', ticker: '207940.KS', exchange: 'KRX' },
-            { name: 'NAVER', ticker: '035420.KS', exchange: 'KRX' },
-            { name: '카카오', ticker: '035720.KS', exchange: 'KRX' },
-            { name: '현대차', ticker: '005380.KS', exchange: 'KRX' },
-            { name: '기아', ticker: '000270.KS', exchange: 'KRX' },
-            { name: 'LG화학', ticker: '051910.KS', exchange: 'KRX' },
-            { name: 'POSCO홀딩스', ticker: '005490.KS', exchange: 'KRX' },
-            { name: '셀트리온', ticker: '068270.KS', exchange: 'KRX' },
-            { name: 'KB금융', ticker: '105560.KS', exchange: 'KRX' },
-            { name: '신한지주', ticker: '055550.KS', exchange: 'KRX' },
-            { name: '하나금융지주', ticker: '086790.KS', exchange: 'KRX' },
-            { name: '삼성SDI', ticker: '006400.KS', exchange: 'KRX' },
-            { name: '현대모비스', ticker: '012330.KS', exchange: 'KRX' },
-            { name: 'LG전자', ticker: '066570.KS', exchange: 'KRX' },
-            { name: '삼성물산', ticker: '028260.KS', exchange: 'KRX' },
-            { name: 'SK이노베이션', ticker: '096770.KS', exchange: 'KRX' },
-            { name: 'SK텔레콤', ticker: '017670.KS', exchange: 'KRX' },
-            { name: 'KT&G', ticker: '033780.KS', exchange: 'KRX' },
-            { name: '카카오뱅크', ticker: '323410.KS', exchange: 'KRX' },
-            { name: '크래프톤', ticker: '259960.KS', exchange: 'KRX' },
-            { name: '엔씨소프트', ticker: '036570.KS', exchange: 'KRX' },
-            { name: '넷마블', ticker: '251270.KS', exchange: 'KRX' },
+        // 주요 주식 종목 매핑 (한국 + 미국)
+        const allStocks = [
+            // === 한국 주요 종목 ===
+            { name: '삼성전자', ticker: '005930.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'SK하이닉스', ticker: '000660.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'LG에너지솔루션', ticker: '373220.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '삼성바이오로직스', ticker: '207940.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'NAVER', ticker: '035420.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '카카오', ticker: '035720.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '현대차', ticker: '005380.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '기아', ticker: '000270.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'LG화학', ticker: '051910.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'POSCO홀딩스', ticker: '005490.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '셀트리온', ticker: '068270.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'KB금융', ticker: '105560.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '신한지주', ticker: '055550.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '하나금융지주', ticker: '086790.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '삼성SDI', ticker: '006400.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '현대모비스', ticker: '012330.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'LG전자', ticker: '066570.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '삼성물산', ticker: '028260.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'SK이노베이션', ticker: '096770.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'SK텔레콤', ticker: '017670.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: 'KT&G', ticker: '033780.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '카카오뱅크', ticker: '323410.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '크래프톤', ticker: '259960.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '엔씨소프트', ticker: '036570.KS', exchange: 'KRX', country: '🇰🇷' },
+            { name: '넷마블', ticker: '251270.KS', exchange: 'KRX', country: '🇰🇷' },
+            
+            // === 미국 빅테크 ===
+            { name: 'Apple', ticker: 'AAPL', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Microsoft', ticker: 'MSFT', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Alphabet (Google)', ticker: 'GOOGL', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Amazon', ticker: 'AMZN', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Meta (Facebook)', ticker: 'META', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Tesla', ticker: 'TSLA', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'NVIDIA', ticker: 'NVDA', exchange: 'NASDAQ', country: '🇺🇸' },
+            
+            // === 미국 반도체/기술 ===
+            { name: 'Intel', ticker: 'INTC', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'AMD', ticker: 'AMD', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Qualcomm', ticker: 'QCOM', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Broadcom', ticker: 'AVGO', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Oracle', ticker: 'ORCL', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Salesforce', ticker: 'CRM', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Adobe', ticker: 'ADBE', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Netflix', ticker: 'NFLX', exchange: 'NASDAQ', country: '🇺🇸' },
+            
+            // === 미국 금융 ===
+            { name: 'Berkshire Hathaway', ticker: 'BRK-B', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'JPMorgan Chase', ticker: 'JPM', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Bank of America', ticker: 'BAC', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Wells Fargo', ticker: 'WFC', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Goldman Sachs', ticker: 'GS', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Morgan Stanley', ticker: 'MS', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Visa', ticker: 'V', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Mastercard', ticker: 'MA', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'PayPal', ticker: 'PYPL', exchange: 'NASDAQ', country: '🇺🇸' },
+            
+            // === 미국 소비재/유통 ===
+            { name: 'Walmart', ticker: 'WMT', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Costco', ticker: 'COST', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Home Depot', ticker: 'HD', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Nike', ticker: 'NKE', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Starbucks', ticker: 'SBUX', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'McDonald\'s', ticker: 'MCD', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Coca-Cola', ticker: 'KO', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'PepsiCo', ticker: 'PEP', exchange: 'NASDAQ', country: '🇺🇸' },
+            { name: 'Procter & Gamble', ticker: 'PG', exchange: 'NYSE', country: '🇺🇸' },
+            
+            // === 미국 헬스케어/제약 ===
+            { name: 'Johnson & Johnson', ticker: 'JNJ', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Pfizer', ticker: 'PFE', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Merck', ticker: 'MRK', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'UnitedHealth', ticker: 'UNH', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Eli Lilly', ticker: 'LLY', exchange: 'NYSE', country: '🇺🇸' },
+            
+            // === 미국 산업/항공/에너지 ===
+            { name: 'Boeing', ticker: 'BA', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Lockheed Martin', ticker: 'LMT', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'ExxonMobil', ticker: 'XOM', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Chevron', ticker: 'CVX', exchange: 'NYSE', country: '🇺🇸' },
+            
+            // === 미국 엔터테인먼트/미디어 ===
+            { name: 'Disney', ticker: 'DIS', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Comcast', ticker: 'CMCSA', exchange: 'NASDAQ', country: '🇺🇸' },
+            
+            // === 미국 모빌리티 ===
+            { name: 'Uber', ticker: 'UBER', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'Lyft', ticker: 'LYFT', exchange: 'NASDAQ', country: '🇺🇸' },
+            
+            // === 미국 통신 ===
+            { name: 'Verizon', ticker: 'VZ', exchange: 'NYSE', country: '🇺🇸' },
+            { name: 'AT&T', ticker: 'T', exchange: 'NYSE', country: '🇺🇸' },
         ];
 
         let currentSVG = null;
@@ -435,7 +502,7 @@
                 return;
             }
 
-            const filtered = koreanStocks.filter(stock => 
+            const filtered = allStocks.filter(stock => 
                 stock.name.toLowerCase().includes(query) || 
                 stock.ticker.toLowerCase().includes(query)
             );
@@ -445,9 +512,9 @@
                 return;
             }
 
-            suggestionsDiv.innerHTML = filtered.map(stock => `
-                <div class="stock-suggestion-item" onclick="selectStock('${stock.ticker}', '${stock.name}')">
-                    <div class="ticker">${stock.ticker}</div>
+            suggestionsDiv.innerHTML = filtered.slice(0, 20).map(stock => `
+                <div class="stock-suggestion-item" onclick="selectStock('${stock.ticker}', '${stock.name.replace(/'/g, "\\'")}')">
+                    <div class="ticker">${stock.country} ${stock.ticker}</div>
                     <div class="name">${stock.name}</div>
                 </div>
             `).join('');
