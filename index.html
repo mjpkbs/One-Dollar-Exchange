@@ -947,6 +947,36 @@
             return points;
         }
 
+        // Y축에 사용할 깔끔한 간격 계산
+        function getNiceInterval(range) {
+            const rawInterval = range / 6; // 6단계로 나눔
+            const magnitude = Math.pow(10, Math.floor(Math.log10(rawInterval)));
+            const normalized = rawInterval / magnitude;
+            
+            let niceInterval;
+            if (normalized < 1.5) {
+                niceInterval = 1 * magnitude;
+            } else if (normalized < 3) {
+                niceInterval = 2 * magnitude;
+            } else if (normalized < 7) {
+                niceInterval = 5 * magnitude;
+            } else {
+                niceInterval = 10 * magnitude;
+            }
+            
+            return niceInterval;
+        }
+
+        // 값을 간격에 맞춰 내림
+        function floorToInterval(value, interval) {
+            return Math.floor(value / interval) * interval;
+        }
+
+        // 값을 간격에 맞춰 올림
+        function ceilToInterval(value, interval) {
+            return Math.ceil(value / interval) * interval;
+        }
+
         function formatDateDisplay(dateStr) {
             if (!dateStr) return '';
             
@@ -982,8 +1012,28 @@
             const isIntradayMode = points[0].date && points[0].date.includes(':');
 
             const values = points.map(p => p.value);
-            const yMin = Math.min(...values) * 0.995;
-            const yMax = Math.max(...values) * 1.005;
+            const dataMin = Math.min(...values);
+            const dataMax = Math.max(...values);
+            
+            let yMin, yMax;
+            
+            if (chartType === 'stock') {
+                // 주식 차트: 깔끔한 round number 사용
+                const range = dataMax - dataMin;
+                const interval = getNiceInterval(range);
+                
+                // 데이터 범위보다 약간 여유있게 설정
+                const padding = interval * 0.5;
+                yMin = floorToInterval(dataMin - padding, interval);
+                yMax = ceilToInterval(dataMax + padding, interval);
+                
+                // 음수가 되지 않도록
+                if (yMin < 0) yMin = 0;
+            } else {
+                // 환율 차트: 기존 방식 (0.5% 여유)
+                yMin = dataMin * 0.995;
+                yMax = dataMax * 1.005;
+            }
 
             let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
             svg += `<rect width="${width}" height="${height}" fill="white"/>`;
@@ -1006,12 +1056,32 @@
             svg += `<text x="${width/2}" y="50" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="14" fill="#666">${subtitleText}</text>`;
 
             // 그리드 및 Y축 라벨
-            const ySteps = 6;
             const isIndex = selectedStockData && selectedStockData.ticker && selectedStockData.ticker.startsWith('^');
             
-            for (let i = 0; i <= ySteps; i++) {
-                const value = yMin + (yMax - yMin) * i / ySteps;
-                const y = margin.top + chartHeight - (chartHeight * i / ySteps);
+            let yLabels = [];
+            if (chartType === 'stock') {
+                // 주식 차트: 계산된 interval 사용
+                const range = yMax - yMin;
+                const interval = getNiceInterval(range);
+                
+                for (let value = yMin; value <= yMax; value += interval) {
+                    yLabels.push(value);
+                }
+                
+                // 정확히 yMax를 포함하도록
+                if (yLabels[yLabels.length - 1] < yMax) {
+                    yLabels.push(yMax);
+                }
+            } else {
+                // 환율 차트: 6단계 균등 분할
+                const ySteps = 6;
+                for (let i = 0; i <= ySteps; i++) {
+                    yLabels.push(yMin + (yMax - yMin) * i / ySteps);
+                }
+            }
+            
+            yLabels.forEach(value => {
+                const y = margin.top + chartHeight - ((value - yMin) / (yMax - yMin) * chartHeight);
                 
                 svg += `<line x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}" stroke="#e0e0e0" stroke-width="1"/>`;
                 
@@ -1024,7 +1094,7 @@
                     suffix = '.00';
                 }
                 svg += `<text x="${margin.left - 10}" y="${y + 5}" text-anchor="end" font-family="AppleSDGothicNeo-Regular" font-size="12" fill="#666">${labelValue}${suffix}</text>`;
-            }
+            });
 
             // X축 라벨
             let xLabelCount, xStep;
