@@ -323,12 +323,15 @@
                 <div class="control-group">
                     <label>종목 검색</label>
                     <div style="position: relative;">
-                        <input type="text" id="stockSearch" placeholder="전 세계 모든 종목 검색 (예: 삼성전자, Apple, Sony, 7203.T)" 
+                        <input type="text" id="stockSearch" placeholder="종목/지수 검색 (예: 삼성전자, 코스피, Apple, S&P 500)" 
                                oninput="searchStock()" onblur="setTimeout(() => hideSuggestions(), 200)">
                         <div id="stockSuggestions" class="stock-suggestions"></div>
                     </div>
-                    <div class="info">💡 <strong>모든 종목 검색 가능!</strong> Yahoo Finance의 전 세계 모든 상장 종목을 실시간으로 검색할 수 있습니다. 한국/미국/일본/중국/유럽 등 모든 거래소 지원.</div>
-                    <div class="info">🔍 <strong>검색 방법:</strong> 종목명(한글/영문) 또는 티커 코드를 입력하세요. 예: "삼성", "Apple", "NVDA", "Sony", "7203.T"</div>
+                    <div class="info">💡 <strong>모든 종목 & 지수 검색 가능!</strong> Yahoo Finance의 전 세계 모든 상장 종목과 주요 지수를 실시간으로 검색할 수 있습니다.</div>
+                    <div class="info">🔍 <strong>검색 예시:</strong> 
+                        <br>• 지수: "코스피", "S&P 500", "^KS11", "^GSPC"
+                        <br>• 종목: "삼성", "Apple", "NVDA", "Sony", "7203.T"
+                    </div>
                     <div class="info">⚠️ CORS 이슈: Yahoo Finance API 접근을 위해 여러 프록시를 자동으로 시도합니다. 모든 프록시 실패 시 <a href="https://chrome.google.com/webstore/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank">CORS 확장 프로그램</a>을 설치해보세요.</div>
                 </div>
 
@@ -378,8 +381,20 @@
     </div>
 
     <script>
-        // 주요 주식 종목 매핑 (한국 + 미국) - 빠른 접근용
+        // 주요 주식 종목 및 지수 매핑 - 빠른 접근용
         const popularStocks = [
+            // === 주요 지수 ===
+            { name: '코스피 지수', ticker: '^KS11', exchange: 'KRX', country: '🇰🇷', type: 'INDEX' },
+            { name: '코스닥 지수', ticker: '^KQ11', exchange: 'KRX', country: '🇰🇷', type: 'INDEX' },
+            { name: 'S&P 500', ticker: '^GSPC', exchange: 'INDEX', country: '🇺🇸', type: 'INDEX' },
+            { name: 'Dow Jones', ticker: '^DJI', exchange: 'INDEX', country: '🇺🇸', type: 'INDEX' },
+            { name: 'NASDAQ', ticker: '^IXIC', exchange: 'INDEX', country: '🇺🇸', type: 'INDEX' },
+            { name: 'KOSPI 200', ticker: '^KS200', exchange: 'KRX', country: '🇰🇷', type: 'INDEX' },
+            { name: 'Nikkei 225', ticker: '^N225', exchange: 'INDEX', country: '🇯🇵', type: 'INDEX' },
+            { name: 'FTSE 100', ticker: '^FTSE', exchange: 'INDEX', country: '🇬🇧', type: 'INDEX' },
+            { name: 'DAX', ticker: '^GDAXI', exchange: 'INDEX', country: '🇩🇪', type: 'INDEX' },
+            { name: 'Hang Seng', ticker: '^HSI', exchange: 'INDEX', country: '🇭🇰', type: 'INDEX' },
+            
             // === 한국 주요 종목 ===
             { name: '삼성전자', ticker: '005930.KS', exchange: 'KRX', country: '🇰🇷' },
             { name: 'SK하이닉스', ticker: '000660.KS', exchange: 'KRX', country: '🇰🇷' },
@@ -527,7 +542,7 @@
                             exchange: q.exchange,
                             type: q.quoteType,
                             country: getCountryFlag(q.symbol, q.exchange)
-                        })).filter(s => s.type === 'EQUITY'); // 주식만 필터링
+                        })).filter(s => s.type === 'EQUITY' || s.type === 'INDEX'); // 주식과 지수 포함
                     }
                     return [];
                 } catch (error) {
@@ -627,12 +642,16 @@
         function displaySearchResults(results) {
             const suggestionsDiv = document.getElementById('stockSuggestions');
             
-            suggestionsDiv.innerHTML = results.map(stock => `
+            suggestionsDiv.innerHTML = results.map(stock => {
+                const isIndex = stock.type === 'INDEX';
+                const icon = isIndex ? '📊' : ''; // 지수는 차트 아이콘
+                return `
                 <div class="stock-suggestion-item" onclick="selectStock('${stock.ticker}', '${stock.name.replace(/'/g, "\\'")}')">
-                    <div class="ticker">${stock.country} ${stock.ticker}</div>
-                    <div class="name">${stock.name}</div>
+                    <div class="ticker">${stock.country} ${icon} ${stock.ticker}</div>
+                    <div class="name">${stock.name}${isIndex ? ' (지수)' : ''}</div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
             
             suggestionsDiv.style.display = 'block';
         }
@@ -988,16 +1007,22 @@
 
             // 그리드 및 Y축 라벨
             const ySteps = 6;
+            const isIndex = selectedStockData && selectedStockData.ticker && selectedStockData.ticker.startsWith('^');
+            
             for (let i = 0; i <= ySteps; i++) {
                 const value = yMin + (yMax - yMin) * i / ySteps;
                 const y = margin.top + chartHeight - (chartHeight * i / ySteps);
                 
                 svg += `<line x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}" stroke="#e0e0e0" stroke-width="1"/>`;
                 
-                const labelValue = chartType === 'stock' ? 
-                    value.toLocaleString('ko-KR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) :
-                    Math.round(value);
-                const suffix = chartType === 'stock' ? '' : '.00';
+                let labelValue, suffix;
+                if (chartType === 'stock') {
+                    labelValue = value.toLocaleString('ko-KR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                    suffix = '';
+                } else {
+                    labelValue = Math.round(value);
+                    suffix = '.00';
+                }
                 svg += `<text x="${margin.left - 10}" y="${y + 5}" text-anchor="end" font-family="AppleSDGothicNeo-Regular" font-size="12" fill="#666">${labelValue}${suffix}</text>`;
             }
 
@@ -1099,7 +1124,10 @@
             const displayValue = chartType === 'stock' ? 
                 lastPoint.value.toLocaleString('ko-KR', {minimumFractionDigits: 0, maximumFractionDigits: 0}) :
                 lastPoint.value.toFixed(2);
-            const suffix = chartType === 'stock' ? '원' : '원';
+            
+            // 지수 여부 확인 (티커가 ^ 로 시작하면 지수)
+            const isIndex = selectedStockData && selectedStockData.ticker.startsWith('^');
+            const suffix = chartType === 'stock' ? (isIndex ? 'pt' : '원') : '원';
             
             svg += `<rect x="${lastX + 10}" y="${lastY - 20}" width="100" height="40" fill="white" stroke="${lineColor}" stroke-width="2" rx="5"/>`;
             svg += `<text x="${lastX + 60}" y="${lastY}" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="16" font-weight="bold" fill="${lineColor}">${displayValue}${suffix}</text>`;
