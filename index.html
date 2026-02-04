@@ -323,11 +323,12 @@
                 <div class="control-group">
                     <label>종목 검색</label>
                     <div style="position: relative;">
-                        <input type="text" id="stockSearch" placeholder="종목명 또는 티커 입력 (예: 삼성전자, Apple, TSLA)" 
+                        <input type="text" id="stockSearch" placeholder="전 세계 모든 종목 검색 (예: 삼성전자, Apple, Sony, 7203.T)" 
                                oninput="searchStock()" onblur="setTimeout(() => hideSuggestions(), 200)">
                         <div id="stockSuggestions" class="stock-suggestions"></div>
                     </div>
-                    <div class="info">💡 종목 검색: 한국(삼성전자, SK하이닉스, NAVER...) 및 미국(Apple, Microsoft, Tesla...) 주요 종목을 검색하거나 티커 코드를 직접 입력하세요</div>
+                    <div class="info">💡 <strong>모든 종목 검색 가능!</strong> Yahoo Finance의 전 세계 모든 상장 종목을 실시간으로 검색할 수 있습니다. 한국/미국/일본/중국/유럽 등 모든 거래소 지원.</div>
+                    <div class="info">🔍 <strong>검색 방법:</strong> 종목명(한글/영문) 또는 티커 코드를 입력하세요. 예: "삼성", "Apple", "NVDA", "Sony", "7203.T"</div>
                     <div class="info">⚠️ CORS 이슈: Yahoo Finance API 접근을 위해 여러 프록시를 자동으로 시도합니다. 모든 프록시 실패 시 <a href="https://chrome.google.com/webstore/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank">CORS 확장 프로그램</a>을 설치해보세요.</div>
                 </div>
 
@@ -377,8 +378,8 @@
     </div>
 
     <script>
-        // 주요 주식 종목 매핑 (한국 + 미국)
-        const allStocks = [
+        // 주요 주식 종목 매핑 (한국 + 미국) - 빠른 접근용
+        const popularStocks = [
             // === 한국 주요 종목 ===
             { name: '삼성전자', ticker: '005930.KS', exchange: 'KRX', country: '🇰🇷' },
             { name: 'SK하이닉스', ticker: '000660.KS', exchange: 'KRX', country: '🇰🇷' },
@@ -473,6 +474,9 @@
             { name: 'AT&T', ticker: 'T', exchange: 'NYSE', country: '🇺🇸' },
         ];
 
+        let searchTimeout = null;
+        let isSearching = false;
+
         let currentSVG = null;
         let chartData = null;
         let currentChartType = 'exchange';
@@ -492,27 +496,138 @@
             }
         }
 
-        // 종목 검색
-        function searchStock() {
-            const query = document.getElementById('stockSearch').value.toLowerCase().trim();
+        // Yahoo Finance에서 실시간 종목 검색
+        async function searchStockFromYahoo(query) {
+            const proxies = [
+                'https://corsproxy.io/?',
+                'https://api.codetabs.com/v1/proxy?quest=',
+                'https://api.allorigins.win/raw?url=',
+            ];
+
+            const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=15&newsCount=0`;
+
+            for (const proxy of proxies) {
+                try {
+                    const proxyUrl = proxy + encodeURIComponent(url);
+                    const response = await fetch(proxyUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                        }
+                    });
+
+                    if (!response.ok) continue;
+
+                    const data = await response.json();
+                    
+                    if (data.quotes && data.quotes.length > 0) {
+                        return data.quotes.map(q => ({
+                            name: q.longname || q.shortname || q.symbol,
+                            ticker: q.symbol,
+                            exchange: q.exchange,
+                            type: q.quoteType,
+                            country: getCountryFlag(q.symbol, q.exchange)
+                        })).filter(s => s.type === 'EQUITY'); // 주식만 필터링
+                    }
+                    return [];
+                } catch (error) {
+                    console.error(`Failed with proxy ${proxy}:`, error);
+                    continue;
+                }
+            }
+            return [];
+        }
+
+        // 티커/거래소 기반 국가 플래그 반환
+        function getCountryFlag(ticker, exchange) {
+            if (ticker.endsWith('.KS') || ticker.endsWith('.KQ') || exchange === 'KSC' || exchange === 'KOE') {
+                return '🇰🇷';
+            } else if (exchange === 'JPX' || ticker.endsWith('.T')) {
+                return '🇯🇵';
+            } else if (exchange === 'SHH' || exchange === 'SHZ' || ticker.endsWith('.SS')) {
+                return '🇨🇳';
+            } else if (exchange === 'LSE' || ticker.endsWith('.L')) {
+                return '🇬🇧';
+            } else if (exchange === 'FRA' || exchange === 'GER' || ticker.endsWith('.DE')) {
+                return '🇩🇪';
+            } else if (ticker.endsWith('.HK')) {
+                return '🇭🇰';
+            } else if (exchange === 'NMS' || exchange === 'NYQ' || exchange === 'NGM' || exchange === 'NCM' || 
+                       exchange === 'NASDAQ' || exchange === 'NYSE' || exchange === 'BATS' || exchange === 'ASE') {
+                return '🇺🇸';
+            }
+            return '🌐';
+        }
+
+        // 종목 검색 (로컬 + Yahoo Finance API)
+        async function searchStock() {
+            const query = document.getElementById('stockSearch').value.trim();
             const suggestionsDiv = document.getElementById('stockSuggestions');
             
             if (query.length === 0) {
                 suggestionsDiv.style.display = 'none';
+                isSearching = false;
                 return;
             }
 
-            const filtered = allStocks.filter(stock => 
-                stock.name.toLowerCase().includes(query) || 
-                stock.ticker.toLowerCase().includes(query)
-            );
+            // 짧은 검색어는 로컬에서만 검색
+            if (query.length < 2) {
+                const filtered = popularStocks.filter(stock => 
+                    stock.name.toLowerCase().includes(query.toLowerCase()) || 
+                    stock.ticker.toLowerCase().includes(query.toLowerCase())
+                );
 
-            if (filtered.length === 0) {
-                suggestionsDiv.style.display = 'none';
+                if (filtered.length > 0) {
+                    displaySearchResults(filtered);
+                } else {
+                    suggestionsDiv.style.display = 'none';
+                }
                 return;
             }
 
-            suggestionsDiv.innerHTML = filtered.slice(0, 20).map(stock => `
+            // debounce: 타이핑 멈춘 후 300ms 대기
+            clearTimeout(searchTimeout);
+            
+            searchTimeout = setTimeout(async () => {
+                isSearching = true;
+                suggestionsDiv.innerHTML = '<div class="stock-suggestion-item" style="text-align:center; color:#999;">검색 중...</div>';
+                suggestionsDiv.style.display = 'block';
+
+                // 1. 로컬 인기 종목에서 먼저 검색
+                const localResults = popularStocks.filter(stock => 
+                    stock.name.toLowerCase().includes(query.toLowerCase()) || 
+                    stock.ticker.toLowerCase().includes(query.toLowerCase())
+                );
+
+                // 2. Yahoo Finance API에서 검색
+                const yahooResults = await searchStockFromYahoo(query);
+
+                // 3. 결과 합치기 (로컬 결과 우선, 중복 제거)
+                const allResults = [...localResults];
+                const existingTickers = new Set(localResults.map(s => s.ticker));
+                
+                yahooResults.forEach(result => {
+                    if (!existingTickers.has(result.ticker)) {
+                        allResults.push(result);
+                        existingTickers.add(result.ticker);
+                    }
+                });
+
+                if (allResults.length > 0) {
+                    displaySearchResults(allResults.slice(0, 20));
+                } else {
+                    suggestionsDiv.innerHTML = '<div class="stock-suggestion-item" style="text-align:center; color:#999;">검색 결과가 없습니다</div>';
+                }
+
+                isSearching = false;
+            }, 300);
+        }
+
+        // 검색 결과 표시
+        function displaySearchResults(results) {
+            const suggestionsDiv = document.getElementById('stockSuggestions');
+            
+            suggestionsDiv.innerHTML = results.map(stock => `
                 <div class="stock-suggestion-item" onclick="selectStock('${stock.ticker}', '${stock.name.replace(/'/g, "\\'")}')">
                     <div class="ticker">${stock.country} ${stock.ticker}</div>
                     <div class="name">${stock.name}</div>
