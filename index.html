@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>차트 생성기 (환율 & 주식)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📊</text></svg>">
     <style>
         * {
             margin: 0;
@@ -1056,8 +1057,6 @@
             svg += `<text x="${width/2}" y="50" text-anchor="middle" font-family="AppleSDGothicNeo-Regular" font-size="14" fill="#666">${subtitleText}</text>`;
 
             // 그리드 및 Y축 라벨
-            const isIndex = selectedStockData && selectedStockData.ticker && selectedStockData.ticker.startsWith('^');
-            
             let yLabels = [];
             if (chartType === 'stock') {
                 // 주식 차트: 계산된 interval 사용
