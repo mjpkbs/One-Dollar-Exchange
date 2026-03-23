@@ -276,7 +276,7 @@
                         <option value="yahoo">Yahoo Finance (빠른 사용, API 키 불필요)</option>
                         <option value="bok">한국은행 API (공식 데이터, API 키 필요)</option>
                     </select>
-                    <div class="info">⚠️ CORS 프록시: Cloudflare Worker를 우선 사용하며, 차단된 네트워크에서는 공개 프록시로 자동 전환됩니다.</div>
+                    <div class="info">⚠️ CORS 프록시: Vercel → Cloudflare Worker 순으로 자동 시도합니다.</div>
                 </div>
 
                 <div class="control-group" id="apiKeyGroup" style="display: none;">
@@ -333,7 +333,7 @@
                         <br>• 지수: "코스피", "S&P 500", "^KS11", "^GSPC"
                         <br>• 종목: "삼성", "Apple", "NVDA", "Sony", "7203.T"
                     </div>
-                    <div class="info">⚠️ CORS 프록시: Cloudflare Worker 우선, 차단 시 공개 프록시로 자동 전환됩니다.</div>
+                    <div class="info">⚠️ CORS 프록시: Vercel → Cloudflare Worker 순으로 자동 전환됩니다.</div>
                 </div>
 
                 <div class="control-group">
@@ -383,15 +383,10 @@
 
     <script>
         // ===== CORS 프록시 설정 =====
-        // 1순위: Cloudflare Worker (빠르고 안정적)
-        // 2순위: 공개 프록시 (workers.dev 차단된 네트워크용 폴백)
-        const CORS_PROXY_URL = 'https://cors-proxy-worker.mjpkbs.workers.dev';
-
-        // allorigins JSON 래퍼 엔드포인트 사용 (CORS 헤더 안정적)
-        const PUBLIC_PROXIES = [
-            { name: 'allorigins', make: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, unwrap: true },
-            { name: 'corsproxy',  make: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`, unwrap: false },
-            { name: 'codetabs',   make: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, unwrap: false },
+        // 자체 프록시 서버들 (순서대로 시도)
+        const PROXY_SERVERS = [
+            'https://cors-proxy-ivory.vercel.app/',              // Vercel (1순위)
+            'https://cors-proxy-worker.mjpkbs.workers.dev',   // Cloudflare Worker (2순위)
         ];
 
         // 타임아웃 포함 fetch
@@ -401,69 +396,32 @@
             return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
         }
 
-        // 공통 프록시 fetch 함수 (Worker → 공개 프록시 자동 폴백)
+        // JSON 응답 검증 후 반환
+        async function fetchAndValidateJSON(fetchUrl, timeoutMs) {
+            const response = await fetchWithTimeout(fetchUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+            }, timeoutMs);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const text = await response.text();
+            JSON.parse(text); // 유효한 JSON인지 확인
+            return new Response(text, { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // 공통 프록시 fetch 함수
         async function proxyFetch(targetUrl) {
-            // Yahoo Finance query1 → query2 변형
-            const targets = [targetUrl];
-            if (targetUrl.includes('query1.finance.yahoo.com')) {
-                targets.push(targetUrl.replace('query1.finance.yahoo.com', 'query2.finance.yahoo.com'));
-            }
-
-            // === 1단계: Cloudflare Worker 시도 (타임아웃 4초) ===
-            for (const url of targets) {
-                try {
-                    const proxyUrl = `${CORS_PROXY_URL}?url=${encodeURIComponent(url)}`;
-                    const response = await fetchWithTimeout(proxyUrl, {
-                        method: 'GET',
-                        headers: { 'Accept': 'application/json' },
-                    }, 4000);
-                    if (response.ok) {
-                        // JSON 응답 검증
-                        const text = await response.text();
-                        JSON.parse(text); // 유효한 JSON인지 확인
-                        console.log(`✅ Worker 성공: ${new URL(url).hostname}`);
-                        return new Response(text, { headers: { 'Content-Type': 'application/json' } });
-                    }
-                } catch (err) {
-                    console.warn(`⚠️ Worker 실패 (${new URL(url).hostname}):`, err.message);
-                }
-            }
-
-            // === 2단계: 공개 프록시 폴백 (타임아웃 15초) ===
-            console.log('🔄 공개 프록시로 전환...');
             let lastError = null;
-            for (const proxy of PUBLIC_PROXIES) {
-                for (const url of targets) {
-                    try {
-                        const proxyUrl = proxy.make(url);
-                        const response = await fetchWithTimeout(proxyUrl, {
-                            method: 'GET',
-                            headers: { 'Accept': 'application/json' },
-                        }, 15000);
 
-                        if (!response.ok) continue;
-
-                        let text = await response.text();
-
-                        // allorigins /get 엔드포인트는 { contents: "..." } 래퍼로 감쌈
-                        if (proxy.unwrap) {
-                            try {
-                                const wrapper = JSON.parse(text);
-                                text = wrapper.contents || text;
-                            } catch {
-                                // 래퍼 파싱 실패시 원본 사용
-                            }
-                        }
-
-                        // JSON 유효성 검증 (HTML 에러 페이지 걸러내기)
-                        JSON.parse(text);
-                        console.log(`✅ ${proxy.name} 성공: ${new URL(url).hostname}`);
-                        return new Response(text, { headers: { 'Content-Type': 'application/json' } });
-
-                    } catch (err) {
-                        lastError = err;
-                        console.warn(`⚠️ ${proxy.name} 실패 (${new URL(url).hostname}):`, err.message);
-                    }
+            // === 자체 프록시 서버 시도 (각 5초 타임아웃) ===
+            for (const server of PROXY_SERVERS) {
+                try {
+                    const proxyUrl = `${server}?url=${encodeURIComponent(targetUrl)}`;
+                    const resp = await fetchAndValidateJSON(proxyUrl, 5000);
+                    console.log(`✅ 성공: ${server}`);
+                    return resp;
+                } catch (err) {
+                    lastError = err;
+                    console.warn(`⚠️ 실패 (${server}):`, err.message);
                 }
             }
 
