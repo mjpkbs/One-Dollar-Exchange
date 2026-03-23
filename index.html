@@ -385,7 +385,7 @@
         // ===== Cloudflare Worker CORS 프록시 설정 =====
         // 아래 URL을 본인의 Cloudflare Worker URL로 변경하세요
         // 배포 방법: cors-proxy-worker.js 파일을 Cloudflare Workers에 배포
-        const CORS_PROXY_URL = 'https://your-worker.your-subdomain.workers.dev';
+        const CORS_PROXY_URL = 'https://cors-proxy-worker.mjpkbs.workers.dev/';
 
         // 공통 프록시 fetch 함수
         async function proxyFetch(targetUrl) {
