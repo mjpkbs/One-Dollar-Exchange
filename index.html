@@ -276,7 +276,7 @@
                         <option value="yahoo">Yahoo Finance (빠른 사용, API 키 불필요)</option>
                         <option value="bok">한국은행 API (공식 데이터, API 키 필요)</option>
                     </select>
-                    <div class="info">⚠️ CORS 프록시: Cloudflare Worker를 통해 데이터를 가져옵니다. Worker URL이 설정되지 않았다면 스크립트 상단의 <code>CORS_PROXY_URL</code>을 수정하세요.</div>
+                    <div class="info">⚠️ CORS 프록시: Cloudflare Worker를 통해 데이터를 가져옵니다. query1 실패 시 query2로 자동 폴백합니다.</div>
                 </div>
 
                 <div class="control-group" id="apiKeyGroup" style="display: none;">
@@ -384,20 +384,39 @@
     <script>
         // ===== Cloudflare Worker CORS 프록시 설정 =====
         // 아래 URL을 본인의 Cloudflare Worker URL로 변경하세요
-        // 배포 방법: cors-proxy-worker.js 파일을 Cloudflare Workers에 배포
-        const CORS_PROXY_URL = 'https://cors-proxy-worker.mjpkbs.workers.dev/';
+        const CORS_PROXY_URL = 'https://cors-proxy-worker.mjpkbs.workers.dev';
 
-        // 공통 프록시 fetch 함수
-        async function proxyFetch(targetUrl) {
-            const url = `${CORS_PROXY_URL}?url=${encodeURIComponent(targetUrl)}`;
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-            });
-            if (!response.ok) {
-                throw new Error(`프록시 요청 실패 (HTTP ${response.status})`);
+        // 공통 프록시 fetch 함수 (재시도 + query2 폴백)
+        async function proxyFetch(targetUrl, retries = 2) {
+            // Yahoo Finance URL이면 query1, query2 둘 다 시도
+            const urls = [targetUrl];
+            if (targetUrl.includes('query1.finance.yahoo.com')) {
+                urls.push(targetUrl.replace('query1.finance.yahoo.com', 'query2.finance.yahoo.com'));
             }
-            return response;
+
+            let lastError = null;
+            for (const url of urls) {
+                for (let attempt = 0; attempt <= retries; attempt++) {
+                    try {
+                        const proxyUrl = `${CORS_PROXY_URL}?url=${encodeURIComponent(url)}`;
+                        const response = await fetch(proxyUrl, {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json' },
+                        });
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        return response;
+                    } catch (err) {
+                        lastError = err;
+                        console.warn(`프록시 시도 실패 (${new URL(url).hostname}, ${attempt + 1}/${retries + 1}):`, err.message);
+                        if (attempt < retries) {
+                            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+                        }
+                    }
+                }
+            }
+            throw new Error(`데이터 요청 실패: ${lastError?.message || '알 수 없는 오류'}. 잠시 후 다시 시도해주세요.`);
         }
 
         // 주요 주식 종목 및 지수 매핑 - 빠른 접근용
