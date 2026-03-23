@@ -387,10 +387,11 @@
         // 2순위: 공개 프록시 (workers.dev 차단된 네트워크용 폴백)
         const CORS_PROXY_URL = 'https://cors-proxy-worker.mjpkbs.workers.dev';
 
+        // allorigins JSON 래퍼 엔드포인트 사용 (CORS 헤더 안정적)
         const PUBLIC_PROXIES = [
-            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+            { name: 'allorigins', make: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, unwrap: true },
+            { name: 'corsproxy',  make: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`, unwrap: false },
+            { name: 'codetabs',   make: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, unwrap: false },
         ];
 
         // 타임아웃 포함 fetch
@@ -417,32 +418,51 @@
                         headers: { 'Accept': 'application/json' },
                     }, 4000);
                     if (response.ok) {
+                        // JSON 응답 검증
+                        const text = await response.text();
+                        JSON.parse(text); // 유효한 JSON인지 확인
                         console.log(`✅ Worker 성공: ${new URL(url).hostname}`);
-                        return response;
+                        return new Response(text, { headers: { 'Content-Type': 'application/json' } });
                     }
                 } catch (err) {
                     console.warn(`⚠️ Worker 실패 (${new URL(url).hostname}):`, err.message);
                 }
             }
 
-            // === 2단계: 공개 프록시 폴백 ===
+            // === 2단계: 공개 프록시 폴백 (타임아웃 15초) ===
             console.log('🔄 공개 프록시로 전환...');
             let lastError = null;
-            for (const url of targets) {
-                for (const makeProxyUrl of PUBLIC_PROXIES) {
+            for (const proxy of PUBLIC_PROXIES) {
+                for (const url of targets) {
                     try {
-                        const proxyUrl = makeProxyUrl(url);
+                        const proxyUrl = proxy.make(url);
                         const response = await fetchWithTimeout(proxyUrl, {
                             method: 'GET',
                             headers: { 'Accept': 'application/json' },
-                        }, 8000);
-                        if (response.ok) {
-                            console.log(`✅ 공개 프록시 성공: ${new URL(url).hostname}`);
-                            return response;
+                        }, 15000);
+
+                        if (!response.ok) continue;
+
+                        let text = await response.text();
+
+                        // allorigins /get 엔드포인트는 { contents: "..." } 래퍼로 감쌈
+                        if (proxy.unwrap) {
+                            try {
+                                const wrapper = JSON.parse(text);
+                                text = wrapper.contents || text;
+                            } catch {
+                                // 래퍼 파싱 실패시 원본 사용
+                            }
                         }
+
+                        // JSON 유효성 검증 (HTML 에러 페이지 걸러내기)
+                        JSON.parse(text);
+                        console.log(`✅ ${proxy.name} 성공: ${new URL(url).hostname}`);
+                        return new Response(text, { headers: { 'Content-Type': 'application/json' } });
+
                     } catch (err) {
                         lastError = err;
-                        console.warn(`⚠️ 공개 프록시 실패:`, err.message);
+                        console.warn(`⚠️ ${proxy.name} 실패 (${new URL(url).hostname}):`, err.message);
                     }
                 }
             }
