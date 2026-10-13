@@ -257,6 +257,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
         }
     </style>
+    <script src="lib/svg2psd.js"></script>
 </head>
 <body>
     <div class="container">
@@ -313,7 +314,7 @@
                 <div class="action-buttons">
                     <button class="primary" onclick="fetchAndDrawChart('exchange')">그래프 생성</button>
                     <button onclick="downloadSVG()">SVG 다운로드</button>
-                    <button class="success" onclick="openInPhotopea()">Photopea로 열기 (PSD 변환)</button>
+                    <button class="success" onclick="downloadPSD()">PSD 다운로드</button>
                 </div>
             </div>
         </div>
@@ -370,7 +371,7 @@
                 <div class="action-buttons">
                     <button class="primary" onclick="fetchAndDrawChart('stock')">그래프 생성</button>
                     <button onclick="downloadSVG()">SVG 다운로드</button>
-                    <button class="success" onclick="openInPhotopea()">Photopea로 열기 (PSD 변환)</button>
+                    <button class="success" onclick="downloadPSD()">PSD 다운로드</button>
                 </div>
             </div>
         </div>
@@ -1231,23 +1232,23 @@
             URL.revokeObjectURL(url);
         }
 
-        // Photopea로 열기
-        function openInPhotopea() {
+        // PSD 다운로드 (브라우저에서 바로 생성 - 셰이프/텍스트 레이어 유지)
+        async function downloadPSD() {
             if (!currentSVG) {
                 alert('먼저 그래프를 생성해주세요.');
                 return;
             }
 
-            const svgBase64 = btoa(unescape(encodeURIComponent(currentSVG)));
-            
-            const photopeaURL = `https://www.photopea.com#${encodeURIComponent(JSON.stringify({
-                files: [`data:image/svg+xml;base64,${svgBase64}`],
-                environment: {}
-            }))}`;
+            const filename = currentChartType === 'stock' && selectedStockData ?
+                `주식차트_${selectedStockData.name}_${new Date().toISOString().split('T')[0]}.psd` :
+                `환율그래프_${new Date().toISOString().split('T')[0]}.psd`;
 
-            window.open(photopeaURL, '_blank');
-            
-            alert('Photopea에서 파일이 열립니다. 편집 후 File > Export as > PSD를 선택하여 저장하세요.');
+            try {
+                await SVGtoPSD.download(currentSVG, filename);
+            } catch (error) {
+                console.error('PSD 생성 오류:', error);
+                alert('PSD 생성 중 오류가 발생했습니다: ' + error.message);
+            }
         }
 
         // 초기 날짜 설정
